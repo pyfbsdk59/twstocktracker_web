@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
       market: t.market, total_value: t.total_value
     }))
 
-    // 批次寫入
+    // 批次寫入####
     if (statsPayload.length > 0) {
       const { error } = await supabase.from('category_stats').insert(statsPayload)
       if (error) throw error
