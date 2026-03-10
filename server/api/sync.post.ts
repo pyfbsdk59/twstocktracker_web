@@ -12,17 +12,21 @@ export default defineEventHandler(async (event) => {
 
   // 2. 讀取 Python 傳來的 JSON
   const body = await readBody(event)
-  const date = body.date
+  const date = body.date // 取得上傳的日期 (例如 '20260310')
   const stats = body.yahoo_stats || []
   const top30 = body.yahoo_top30 || []
 
-  // 3. 使用 Service Role 繞過 RLS 寫入資料庫
+  if (!date) {
+    throw createError({ statusCode: 400, statusMessage: '缺少日期資料' })
+  }
+
+  // 3. 使用 Service Role 寫入資料庫
   const supabase = await serverSupabaseServiceRole(event)
 
   try {
-    // 為了保持儀表板為「最新狀態」，先清空舊資料
-    await supabase.from('category_stats').delete().neq('id', 0)
-    await supabase.from('daily_top30').delete().neq('id', 0)
+    // 【修改重點】：只刪除「上傳日期當天」的舊資料，避免同一天重複點擊寫入。其他天的歷史紀錄會完美保留！
+    await supabase.from('category_stats').delete().eq('date', date)
+    await supabase.from('daily_top30').delete().eq('date', date)
 
     // 準備寫入格式
     const statsPayload = stats.map((s: any) => ({
@@ -35,7 +39,7 @@ export default defineEventHandler(async (event) => {
       market: t.market, total_value: t.total_value
     }))
 
-    // 批次寫入####
+    // 批次寫入
     if (statsPayload.length > 0) {
       const { error } = await supabase.from('category_stats').insert(statsPayload)
       if (error) throw error
